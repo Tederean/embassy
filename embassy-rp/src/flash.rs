@@ -232,7 +232,6 @@ impl<'d, T: Instance, M: Mode, const FLASH_SIZE: usize> Flash<'d, T, M, FLASH_SI
     }
 
     /// Read SPI flash unique ID
-    #[cfg(feature = "rp2040")]
     pub fn blocking_unique_id(&mut self, uid: &mut [u8]) -> Result<(), Error> {
         unsafe { in_ram(|| ram_helpers::flash_unique_id(uid))? };
         Ok(())
@@ -738,7 +737,6 @@ mod ram_helpers {
     ///   - DMA must not access flash memory
     ///
     /// Credit: taken from `rp2040-flash` (also licensed Apache+MIT)
-    #[cfg(feature = "rp2040")]
     pub unsafe fn flash_unique_id(out: &mut [u8]) {
         let mut boot2 = [0u32; 256 / 4];
         let ptrs = if USE_BOOT2 {
