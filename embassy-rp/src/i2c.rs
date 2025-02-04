@@ -101,10 +101,10 @@ impl<'d, T: Instance> I2c<'d, T, Async> {
         sda: impl Peripheral<P = impl SdaPin<T>> + 'd,
         _irq: impl Binding<T::Interrupt, InterruptHandler<T>>,
         config: Config,
-    ) -> Self {
+    ) -> Result<Self, ConfigError> {
         into_ref!(scl, sda);
 
-        let i2c = Self::new_inner(peri, scl.map_into(), sda.map_into(), config);
+        let i2c = Self::new_inner(peri, scl.map_into(), sda.map_into(), config)?;
 
         let r = T::regs();
 
@@ -113,7 +113,7 @@ impl<'d, T: Instance> I2c<'d, T, Async> {
         T::Interrupt::unpend();
         unsafe { T::Interrupt::enable() };
 
-        i2c
+        Ok(i2c)
     }
 
     /// Calls `f` to check if we are ready or not.
