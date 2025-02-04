@@ -87,7 +87,7 @@ impl<'d, T: Instance> I2c<'d, T, Blocking> {
         scl: impl Peripheral<P = impl SclPin<T>> + 'd,
         sda: impl Peripheral<P = impl SdaPin<T>> + 'd,
         config: Config,
-    ) -> Self {
+    ) -> Result<Self, ConfigError> {
         into_ref!(scl, sda);
         Self::new_inner(peri, scl.map_into(), sda.map_into(), config)
     }
@@ -135,7 +135,7 @@ impl<'d, T: Instance> I2c<'d, T, Async> {
         .await
     }
 
-    async fn read_async_internal(&mut self, buffer: &mut [u8], restart: bool, send_stop: bool) -> Result<(), Error> {
+    pub async fn read_async_internal(&mut self, buffer: &mut [u8], restart: bool, send_stop: bool) -> Result<(), Error> {
         if buffer.is_empty() {
             return Err(Error::InvalidReadBufferLength);
         }
@@ -217,7 +217,7 @@ impl<'d, T: Instance> I2c<'d, T, Async> {
         self.wait_stop_det(abort_reason, send_stop).await
     }
 
-    async fn write_async_internal(
+    pub async fn write_async_internal(
         &mut self,
         bytes: impl IntoIterator<Item = u8>,
         send_stop: bool,
@@ -317,7 +317,7 @@ impl<'d, T: Instance> I2c<'d, T, Async> {
 
     /// Read from address into buffer asynchronously.
     pub async fn read_async(&mut self, addr: impl Into<u16>, buffer: &mut [u8]) -> Result<(), Error> {
-        Self::setup(addr.into())?;
+        self.setup(addr.into())?;
         self.read_async_internal(buffer, true, true).await
     }
 
@@ -327,7 +327,7 @@ impl<'d, T: Instance> I2c<'d, T, Async> {
         addr: impl Into<u16>,
         bytes: impl IntoIterator<Item = u8>,
     ) -> Result<(), Error> {
-        Self::setup(addr.into())?;
+        self.setup(addr.into())?;
         self.write_async_internal(bytes, true).await
     }
 
@@ -338,7 +338,7 @@ impl<'d, T: Instance> I2c<'d, T, Async> {
         bytes: impl IntoIterator<Item = u8>,
         buffer: &mut [u8],
     ) -> Result<(), Error> {
-        Self::setup(addr.into())?;
+        self.setup(addr.into())?;
         self.write_async_internal(bytes, false).await?;
         self.read_async_internal(buffer, true, true).await
     }
@@ -383,7 +383,7 @@ impl<'d, T: Instance + 'd, M: Mode> I2c<'d, T, M> {
         scl: PeripheralRef<'d, AnyPin>,
         sda: PeripheralRef<'d, AnyPin>,
         config: Config,
-    ) -> Self {
+    ) -> Result<Self, ConfigError> {
         into_ref!(_peri);
 
         let reset = T::reset();
@@ -396,11 +396,9 @@ impl<'d, T: Instance + 'd, M: Mode> I2c<'d, T, M> {
 
         let mut me = Self { phantom: PhantomData };
 
-        if let Err(e) = me.set_config_inner(&config) {
-            panic!("Error configuring i2c: {:?}", e);
-        }
+        me.set_config_inner(&config)?;
 
-        me
+        Ok(me)
     }
 
     fn set_config_inner(&mut self, config: &Config) -> Result<(), ConfigError> {
@@ -468,7 +466,7 @@ impl<'d, T: Instance + 'd, M: Mode> I2c<'d, T, M> {
         Ok(())
     }
 
-    fn setup(addr: u16) -> Result<(), Error> {
+    pub fn setup(&mut self, addr: u16) -> Result<(), Error> {
         if addr >= 0x80 {
             return Err(Error::AddressOutOfRange(addr));
         }
@@ -601,20 +599,20 @@ impl<'d, T: Instance + 'd, M: Mode> I2c<'d, T, M> {
 
     /// Read from address into buffer blocking caller until done.
     pub fn blocking_read(&mut self, address: impl Into<u16>, read: &mut [u8]) -> Result<(), Error> {
-        Self::setup(address.into())?;
+        self.setup(address.into())?;
         self.read_blocking_internal(read, true, true)
         // Automatic Stop
     }
 
     /// Write to address from buffer blocking caller until done.
     pub fn blocking_write(&mut self, address: impl Into<u16>, write: &[u8]) -> Result<(), Error> {
-        Self::setup(address.into())?;
+        self.setup(address.into())?;
         self.write_blocking_internal(write, true)
     }
 
     /// Write to address from bytes and read from address into buffer blocking caller until done.
     pub fn blocking_write_read(&mut self, address: impl Into<u16>, write: &[u8], read: &mut [u8]) -> Result<(), Error> {
-        Self::setup(address.into())?;
+        self.setup(address.into())?;
         self.write_blocking_internal(write, false)?;
         self.read_blocking_internal(read, true, true)
         // Automatic Stop
@@ -653,7 +651,7 @@ impl<'d, T: Instance, M: Mode> embedded_hal_02::blocking::i2c::Transactional for
         address: u8,
         operations: &mut [embedded_hal_02::blocking::i2c::Operation<'_>],
     ) -> Result<(), Self::Error> {
-        Self::setup(address.into())?;
+        self.setup(address.into())?;
         for i in 0..operations.len() {
             let last = i == operations.len() - 1;
             match &mut operations[i] {
@@ -707,7 +705,7 @@ impl<'d, T: Instance, M: Mode> embedded_hal_1::i2c::I2c for I2c<'d, T, M> {
         address: u8,
         operations: &mut [embedded_hal_1::i2c::Operation<'_>],
     ) -> Result<(), Self::Error> {
-        Self::setup(address.into())?;
+        self.setup(address.into())?;
         for i in 0..operations.len() {
             let last = i == operations.len() - 1;
             match &mut operations[i] {
@@ -746,7 +744,7 @@ where
         let addr: u16 = address.into();
 
         if !operations.is_empty() {
-            Self::setup(addr)?;
+            self.setup(addr)?;
         }
         let mut iterator = operations.iter_mut();
 
